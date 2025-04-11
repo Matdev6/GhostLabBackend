@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://ghostlab:ghostlab@db:5432/ghostlab
+    volumes:
+      - .:/app
+      - ./app/uploads:/app/uploads  # ⬅️ volume persistente para uploads
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ghostlab
+      POSTGRES_PASSWORD: ghostlab
+      POSTGRES_DB: ghostlab
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
