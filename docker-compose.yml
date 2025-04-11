@@ -1,8 +1,7 @@
-version: "3.8"
-
 services:
   api:
     build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # 🔁 esse override é só local
     ports:
       - "8000:8000"
     depends_on:
@@ -11,7 +10,7 @@ services:
       DATABASE_URL: postgresql://ghostlab:ghostlab@db:5432/ghostlab
     volumes:
       - .:/app
-      - ./app/uploads:/app/uploads  # ⬅️ volume persistente para uploads
+      - ./app/uploads:/app/uploads
 
   db:
     image: postgres:15
