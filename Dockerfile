@@ -1,7 +1,9 @@
 FROM python:3.11-slim
 
 
+COPY . /app
 WORKDIR /app
+
 
 # Copia o requirements.txt da pasta app
 COPY app/requirements.txt .
