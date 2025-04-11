@@ -8,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Monta os arquivos estáticos
+app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
 
 
 beats.Base.metadata.create_all(bind=engine)
