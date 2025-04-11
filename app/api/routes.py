@@ -9,8 +9,7 @@ from app.schemas.beats import BeatsRead, BeatsCreate
 
 router = APIRouter()
 
-UPLOAD_DIR = "app/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @router.post("/beats/", response_model=BeatsRead)
 async def create_beat(
