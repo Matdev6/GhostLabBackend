@@ -1,15 +1,28 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import uuid4
-import os
 
 from app.db.database import get_db
 from app.models.beats import Beats
 from app.schemas.beats import BeatsRead, BeatsCreate
 
+import cloudinary
+import cloudinary.uploader
+import re
+
+cloudinary.config(
+    cloud_name="dec0dwwvq",
+    api_key="888773766288889",
+    api_secret="hIIRzWYUkWjxmvj-wC1yM2Hlacg",
+    secure=True
+)
+
 router = APIRouter()
 
-
+# Função auxiliar para extrair public_id do Cloudinary
+def extract_public_id(url: str):
+    match = re.search(r"/([^/]+)\.[a-z]+$", url)
+    return match.group(1) if match else None
 
 @router.post("/beats/", response_model=BeatsRead)
 async def create_beat(
@@ -19,22 +32,24 @@ async def create_beat(
     audio: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    image_filename = f"{uuid4()}_{image.filename}"
-    audio_filename = f"{uuid4()}_{audio.filename}"
+    image_upload = cloudinary.uploader.upload(
+        await image.read(),
+        folder="beats/images",
+        resource_type="image",
+        public_id=str(uuid4())
+    )
 
-    image_path = os.path.join(UPLOAD_DIR, image_filename)
-    audio_path = os.path.join(UPLOAD_DIR, audio_filename)
-
-    with open(image_path, "wb") as f:
-        f.write(await image.read())
-
-    with open(audio_path, "wb") as f:
-        f.write(await audio.read())
+    audio_upload = cloudinary.uploader.upload(
+        await audio.read(),
+        folder="beats/audio",
+        resource_type="video",
+        public_id=str(uuid4())
+    )
 
     beat = Beats(
         name=name,
-        image_path=image_path,
-        audio_path=audio_path,
+        image_path=image_upload["secure_url"],
+        audio_path=audio_upload["secure_url"],
         exclusive=exclusive
     )
     db.add(beat)
@@ -44,26 +59,59 @@ async def create_beat(
     return beat
 
 
-
 @router.get("/beats/", response_model=list[BeatsRead])
 def get_beats(db: Session = Depends(get_db)):
-    beats = db.query(Beats).all()
-    return beats
+    return db.query(Beats).all()
+
 
 @router.put("/beats/{id}", response_model=BeatsRead)
-def update_beat(id: int, updated_beat: BeatsCreate, db: Session = Depends(get_db)):
+async def update_beat(
+    id: int,
+    name: str = Form(...),
+    exclusive: bool = Form(...),
+    image: UploadFile = File(None),
+    audio: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
     beat = db.query(Beats).filter(Beats.id == id).first()
     if not beat:
         raise HTTPException(status_code=404, detail="Beat não encontrado")
 
-    beat.name = updated_beat.name
-    beat.exclusive = updated_beat.exclusive
-    beat.image_path = updated_beat.image_path
-    beat.audio_path = updated_beat.audio_path
+    # Substituir imagem, se enviada
+    if image:
+        old_img_id = extract_public_id(beat.image_path)
+        if old_img_id:
+            cloudinary.uploader.destroy(f"beats/images/{old_img_id}", resource_type="image")
+
+        new_image = cloudinary.uploader.upload(
+            await image.read(),
+            folder="beats/images",
+            resource_type="image",
+            public_id=str(uuid4())
+        )
+        beat.image_path = new_image["secure_url"]
+
+    # Substituir áudio, se enviado
+    if audio:
+        old_audio_id = extract_public_id(beat.audio_path)
+        if old_audio_id:
+            cloudinary.uploader.destroy(f"beats/audio/{old_audio_id}", resource_type="video")
+
+        new_audio = cloudinary.uploader.upload(
+            await audio.read(),
+            folder="beats/audio",
+            resource_type="video",
+            public_id=str(uuid4())
+        )
+        beat.audio_path = new_audio["secure_url"]
+
+    beat.name = name
+    beat.exclusive = exclusive
 
     db.commit()
     db.refresh(beat)
     return beat
+
 
 @router.delete("/beats/{id}")
 def delete_beat(id: int, db: Session = Depends(get_db)):
@@ -71,12 +119,16 @@ def delete_beat(id: int, db: Session = Depends(get_db)):
     if not beat:
         raise HTTPException(status_code=404, detail="Beat não encontrado")
 
-    # Remove arquivos do sistema
-    if os.path.exists(beat.image_path):
-        os.remove(beat.image_path)
-    if os.path.exists(beat.audio_path):
-        os.remove(beat.audio_path)
+    # Deletar arquivos no Cloudinary
+    img_id = extract_public_id(beat.image_path)
+    audio_id = extract_public_id(beat.audio_path)
+
+    if img_id:
+        cloudinary.uploader.destroy(f"beats/images/{img_id}", resource_type="image")
+    if audio_id:
+        cloudinary.uploader.destroy(f"beats/audio/{audio_id}", resource_type="video")
 
     db.delete(beat)
     db.commit()
+
     return {"detail": f"Beat com id {id} removido com sucesso."}
